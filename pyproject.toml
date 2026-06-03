@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=61", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "google-play-api-unofficial"
+version = "0.1.0"
+description = "Unofficial Python library and CLI for reading public data from the Google Play Store: autocomplete, search results, and per-app details. No API keys, no auth."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Tej Magar" },
+]
+keywords = [
+    "play-store",
+    "google-play",
+    "android",
+    "scraper",
+    "cli",
+    "autocomplete",
+    "unofficial",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Utilities",
+]
+dependencies = []
+
+[project.scripts]
+google-play-api-unofficial = "google_play_api_unofficial.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/tejmagar/google-play-api-unofficial"
+Issues = "https://github.com/tejmagar/google-play-api-unofficial/issues"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
