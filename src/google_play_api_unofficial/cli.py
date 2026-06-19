@@ -16,6 +16,7 @@ import time
 from .suggest import fetch_suggestions, Filter
 from .search import fetch_apps
 from .details import fetch_app_details, AppNotFoundError
+from .publisher import fetch_publisher_apps
 
 
 def _filter_type(s: str) -> Filter:
@@ -198,6 +199,24 @@ def cmd_all(args) -> int:
     return 0
 
 
+def cmd_developer(args) -> int:
+    out: dict[str, list[dict]] = {}
+    for pub in args.publishers:
+        try:
+            out[pub] = fetch_publisher_apps(pub)
+        except Exception as e:
+            out[pub] = []
+            print(f"! developer error for '{pub}': {e}", file=sys.stderr)
+    if args.json:
+        print(json.dumps(out, indent=2, ensure_ascii=False))
+        return 0
+    for pub, apps in out.items():
+        print(f"\n=== {pub} ===")
+        print(f"  Apps ({len(apps)}):")
+        _print_apps_human(apps)
+    return 0
+
+
 # ---------- main ----------
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
@@ -231,6 +250,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_all.add_argument("queries", nargs="+", help="Search queries")
     p_all.add_argument("--json", action="store_true", help="Output as JSON")
     p_all.set_defaults(func=cmd_all)
+
+    p_dev = sub.add_parser("developer", help="All apps by a publisher/developer name")
+    p_dev.add_argument("publishers", nargs="+",
+                       help="Developer display name, e.g. \"Google LLC\"")
+    p_dev.add_argument("--json", action="store_true", help="Output as JSON")
+    p_dev.set_defaults(func=cmd_developer)
 
     return p
 
