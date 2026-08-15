@@ -8,7 +8,7 @@ version = "0.1.1"
 description = "Unofficial Python library and CLI for reading public data from the Google Play Store: autocomplete, search results, and per-app details. No API keys, no auth."
 readme = "README.md"
 requires-python = ">=3.9"
-license = { file = "LICENSE" }
+
 authors = [
     { name = "Tej Magar" },
 ]
@@ -48,6 +48,7 @@ Issues = "https://github.com/tejmagar/google-play-api-unofficial/issues"
 
 [tool.setuptools]
 package-dir = { "" = "src" }
+license-files = []
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -102,7 +102,7 @@ Output:
 
 ### `search` — top 30 apps
 
-Fetches the top 30 apps matching a query. Each result has: `title`, `package`, `rating`, `category`, `developer`, `installs`, `icon`, `url`.
+Fetches the top 30 apps matching a query. Each result has: `title`, `package`, `rating`, `category`, `developer`, `installs`, `icon`, `url`, `featured` (`True` when Play promotes the app in the featured hero card above the organic results).
 
 ```bash
 google-play-api-unofficial search "habit tracker"
@@ -407,16 +407,17 @@ Output of `fetch_app_details` (and the enriched results from `search --with-deta
 
 Output of `fetch_apps`:
 
-| Field | Type |
-|---|---|
-| `package` | `str` |
-| `title` | `str` |
-| `rating` | `str or None` |
-| `category` | `str or None` |
-| `developer` | `str or None` |
-| `installs` | `str or None` |
-| `icon` | `str or None` |
-| `url` | `str or None` |
+| Field | Type | Notes |
+|---|---|---|
+| `package` | `str` | App id |
+| `title` | `str` | App name |
+| `rating` | `str or None` | Average star rating |
+| `category` | `str or None` | App category |
+| `developer` | `str or None` | Developer name |
+| `installs` | `str or None` | Display install bucket |
+| `icon` | `str or None` | App icon URL |
+| `url` | `str or None` | Play Store URL |
+| `featured` | `bool` | `True` when Play promotes the app in the featured hero card (`apps_mdp_search_results_cluster`) above the organic results. The featured card is not part of the organic list, so its app is prepended to the results. |
 
 ### Error handling
 

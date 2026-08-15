@@ -39,7 +39,8 @@ def _print_apps_human(apps: list[dict]) -> None:
         rating = f"  {a['rating']}*" if a.get("rating") else ""
         installs = f"  {a['installs']}" if a.get("installs") else ""
         cat = f"  [{a['category']}]" if a.get("category") else ""
-        print(f"    - {a['title']}{rating}{installs}{cat}")
+        marker = " [FEATURED]" if a.get("featured") else ""
+        print(f"    - {a['title']}{rating}{installs}{cat}{marker}")
         print(f"        {a['package']}")
 
 
