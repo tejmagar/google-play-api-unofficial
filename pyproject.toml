@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "google-play-api-unofficial"
-version = "0.1.1"
+version = "0.2.0"
 description = "Unofficial Python library and CLI for reading public data from the Google Play Store: autocomplete, search results, and per-app details. No API keys, no auth."
 readme = "README.md"
 requires-python = ">=3.9"
