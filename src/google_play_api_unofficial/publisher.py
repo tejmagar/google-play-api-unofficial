@@ -32,7 +32,7 @@ import urllib.error
 import urllib.parse
 
 from .http import PLAY_BASE, fetch, post_form
-from .search import _extract, _find_apps_block
+from .search import _extract, _find_apps_block, _looks_like_app_entry
 
 __all__ = ["fetch_publisher_apps", "PlayShapeChanged", "SEARCH_CAP"]
 
@@ -171,15 +171,46 @@ def _inline_entries(html: str) -> list[dict]:
     cluster lands in is not stable, so scan every ``ds:`` block and keep the
     largest list of app-shaped entries.
     """
-    best, best_block = 0, []
+    best: tuple[int, list] = (0, [])
     for m in _DATA_CALLBACK_RE.finditer(html):
         try:
-            block = _find_apps_block(json.loads(m.group(2))) or []
+            data = json.loads(m.group(2))
         except (json.JSONDecodeError, ValueError):
             continue
-        if len(block) > best:
-            best, best_block = len(block), block
-    return _collect(best_block)
+        entries = _largest_entries(data)
+        if len(entries) > best[0]:
+            best = (len(entries), entries)
+    return _collect(best[1])
+
+
+def _largest_entries(data) -> list:
+    """The largest list of app-shaped entries anywhere in ``data``.
+
+    Two shapes exist side by side: a ``/developer`` page wraps every entry in a
+    single-element list, a ``/dev`` page ships them bare. Recursing for the
+    biggest list in either shape keeps this independent of which page Play
+    served and which ``ds:`` slot the cluster landed in.
+    """
+    best: list = []
+
+    def walk(node):
+        nonlocal best
+        if not isinstance(node, list):
+            return
+        if all(isinstance(x, list) and len(x) == 1
+               and _looks_like_app_entry(x[0]) for x in node):
+            entries = [x[0] for x in node]
+        elif all(_looks_like_app_entry(x) for x in node):
+            entries = node
+        else:
+            entries = None
+        if entries is not None and len(entries) > len(best):
+            best = entries
+        for x in node:
+            walk(x)
+
+    walk(data)
+    return best
 
 
 def _publisher_url(publisher: str) -> str:
@@ -229,24 +260,74 @@ def _parse_rpc(body: str) -> tuple[list, str | None]:
     if line is None:
         raise PlayShapeChanged("no wrb.fr frame in the RPC response")
     cluster = json.loads(json.loads(line)[0][2])[0]
-    entries = cluster[22][0]
-    # The next cursor sits beside the entries. Its absence is how the walk ends,
-    # so a missing one is an answer rather than a failure.
-    try:
-        nxt = cluster[22][1][3][1]
-    except (IndexError, TypeError):
-        nxt = None
+    entries, token = _rpc_cluster(cluster)
+    if entries is None:
+        raise PlayShapeChanged("no apps cluster in the RPC response")
+    return entries, token
+
+
+def _rpc_cluster(cluster: list) -> tuple[list | None, str | None]:
+    """The entries and the next cursor out of one cluster.
+
+    ``/developer`` pages nest the apps at ``cluster[22][0]`` wrapped one per
+    cell; ``/dev`` numeric-id pages put them bare at ``cluster[21][0]`` and may
+    ship no cursor at all. The shape can shuffle again, so the block is found
+    by recursing for the largest app-shaped list rather than by index, and the
+    cursor is read from the sibling that usually sits next to it.
+    """
+    entries, parent = _largest_entries_with_parent(cluster)
+    nxt = None
+    if parent is not None and len(parent) > 1:
+        sibling = parent[1]
+        if (isinstance(sibling, list) and len(sibling) > 3
+                and isinstance(sibling[3], list) and sibling[3]
+                and isinstance(sibling[3][1], str)):
+            nxt = sibling[3][1]
     return entries, nxt
 
 
+def _largest_entries_with_parent(data) -> tuple[list, list | None]:
+    """The largest app-shaped list in ``data`` and the list that holds it.
+
+    The cursor on a ``/developer`` page lives beside the entries, so returning
+    the parent is what lets the caller read it without knowing its index.
+    """
+    best: tuple[int, list, list | None] = (0, [], None)
+
+    def walk(node, parent):
+        nonlocal best
+        if not isinstance(node, list):
+            return
+        if all(isinstance(x, list) and len(x) == 1
+               and _looks_like_app_entry(x[0]) for x in node):
+            entries = [x[0] for x in node]
+        elif all(_looks_like_app_entry(x) for x in node):
+            entries = node
+        else:
+            entries = None
+        if entries is not None and len(entries) > best[0]:
+            best = (len(entries), entries, parent)
+        for x in node:
+            walk(x, node)
+
+    walk(data, None)
+    if best[0] == 0:
+        return None, None
+    return best[1], best[2]
+
+
 def _collect(block: list) -> list[dict]:
-    """Entries to app dicts, in order, without repeats."""
+    """Entries (bare or single-cell-wrapped) to app dicts, in order, uniquely."""
     apps: list[dict] = []
     seen: set[str] = set()
-    for wrapper in block:
-        if not (isinstance(wrapper, list) and wrapper):
+    for cell in block:
+        entry = cell
+        if (isinstance(cell, list) and len(cell) == 1
+                and _looks_like_app_entry(cell[0])):
+            entry = cell[0]
+        if not (isinstance(entry, list) and entry):
             continue
-        app = _extract(wrapper[0])
+        app = _extract(entry)
         if app and app["package"] not in seen:
             seen.add(app["package"])
             apps.append(app)
