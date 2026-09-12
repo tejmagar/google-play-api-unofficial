@@ -59,6 +59,13 @@ _DS4_RE = re.compile(
     r"AF_initDataCallback\(\{key:\s*'ds:4',.*?data:(.*?),\s*sideChannel",
     re.DOTALL,
 )
+# Any inline data block. The publisher page has moved its cluster between
+# ds:4 and ds:3 and may move it again, so the walk scans every block and
+# keeps the one with the most app entries instead of pinning a key.
+_DATA_CALLBACK_RE = re.compile(
+    r"AF_initDataCallback\(\{key:\s*'(ds:\d+)',.*?data:(.*?),\s*sideChannel",
+    re.DOTALL,
+)
 
 
 class PlayShapeChanged(RuntimeError):
@@ -120,10 +127,24 @@ def _search_once(publisher: str, timeout: int) -> list[dict]:
 
 def _walk_publisher_page(publisher: str, max_apps: int | None,
                          timeout: int, pause: float) -> list[dict]:
-    """Page the publisher's own listing until it stops yielding new apps."""
+    """Page the publisher's own listing until it stops yielding new apps.
+
+    Small publishers render their whole catalogue inline in the page with no
+    continuation cursor; large ones render a first page inline and page the
+    rest through the RPC. Both are read here: the inline entries first (they
+    are the first page either way), then any further RPC pages.
+    """
     page_url = _publisher_url(publisher)
-    sid, bl, token = _session(fetch(page_url, timeout=timeout))
+    try:
+        html = fetch(page_url, timeout=timeout)
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return []
+        raise
+    sid, bl, token = _session(html)
     apps: dict[str, dict] = {}
+    for app in _inline_entries(html):
+        apps.setdefault(app["package"], app)
 
     while token:
         entries, token = _rpc_page(page_url, sid, bl, token, timeout)
@@ -142,6 +163,25 @@ def _walk_publisher_page(publisher: str, max_apps: int | None,
     return list(apps.values())
 
 
+def _inline_entries(html: str) -> list[dict]:
+    """Apps embedded directly in the publisher page's data blocks.
+
+    Play renders the publisher's own games first, inline, in an
+    ``AF_initDataCallback`` block before any lazy-scroll magic. Which slot the
+    cluster lands in is not stable, so scan every ``ds:`` block and keep the
+    largest list of app-shaped entries.
+    """
+    best, best_block = 0, []
+    for m in _DATA_CALLBACK_RE.finditer(html):
+        try:
+            block = _find_apps_block(json.loads(m.group(2))) or []
+        except (json.JSONDecodeError, ValueError):
+            continue
+        if len(block) > best:
+            best, best_block = len(block), block
+    return _collect(best_block)
+
+
 def _publisher_url(publisher: str) -> str:
     """Their page. Numeric ids live under /dev, display names under /developer."""
     path = "dev" if publisher.isdigit() else "developer"
@@ -149,20 +189,22 @@ def _publisher_url(publisher: str) -> str:
             f"?id={urllib.parse.quote_plus(publisher)}&hl=en&gl=us")
 
 
-def _session(html: str) -> tuple[str, str, str]:
-    """The three things the page hands its own RPC calls.
+def _session(html: str) -> tuple[str, str, str | None]:
+    """The things the page hands its own RPC calls.
 
-    ``f.sid`` and ``bl`` identify the session and the server build. The token is
-    the cursor into this publisher's cluster and carries the publisher inside
+    ``f.sid`` and ``bl`` identify the session and the server build. The IAB
+    token is the cursor into a *paged* cluster and carries the publisher inside
     it, which is why it must be read off their page rather than constructed.
+    Small publishers render everything inline and hand out no cursor at all, so
+    a missing token is ``None``: the walk has nothing further to page.
     """
     sid, bl, token = (_SID_RE.search(html), _BL_RE.search(html),
                       _TOKEN_RE.search(html))
-    if not (sid and bl and token):
+    if not (sid and bl):
         raise PlayShapeChanged(
             "the publisher page no longer carries what this reads from it "
-            "(f.sid, cfb2h, cluster token)")
-    return sid.group(1), bl.group(1), token.group(1)
+            "(f.sid, cfb2h)")
+    return sid.group(1), bl.group(1), token.group(1) if token else None
 
 
 def _rpc_page(page_url: str, sid: str, bl: str, token: str,
