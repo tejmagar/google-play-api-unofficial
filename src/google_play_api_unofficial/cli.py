@@ -106,7 +106,7 @@ def cmd_search(args) -> int:
     for q in args.queries:
         out[q] = {}
         try:
-            apps = fetch_apps(q)
+            apps = fetch_apps(q, country=args.country)
         except Exception as e:
             apps = []
             print(f"! apps error for '{q}': {e}", file=sys.stderr)
@@ -114,7 +114,7 @@ def cmd_search(args) -> int:
             enriched = []
             for i, a in enumerate(apps):
                 try:
-                    d = fetch_app_details(a["package"])
+                    d = fetch_app_details(a["package"], country=args.country)
                 except AppNotFoundError:
                     d = None
                     print(f"! app not found: {a['package']}", file=sys.stderr)
@@ -149,7 +149,7 @@ def cmd_details(args) -> int:
     out: dict[str, dict | None] = {}
     for i, pkg in enumerate(args.packages):
         try:
-            out[pkg] = fetch_app_details(pkg)
+            out[pkg] = fetch_app_details(pkg, country=args.country)
         except AppNotFoundError:
             out[pkg] = None
             print(f"! app not found: {pkg}", file=sys.stderr)
@@ -181,7 +181,7 @@ def cmd_all(args) -> int:
             out[q]["suggestions"] = []
             print(f"! suggest error for '{q}': {e}", file=sys.stderr)
         try:
-            out[q]["apps"] = fetch_apps(q)
+            out[q]["apps"] = fetch_apps(q, country=args.country)
         except Exception as e:
             out[q]["apps"] = []
             print(f"! apps error for '{q}': {e}", file=sys.stderr)
@@ -204,7 +204,7 @@ def cmd_developer(args) -> int:
     out: dict[str, list[dict]] = {}
     for pub in args.publishers:
         try:
-            out[pub] = fetch_publisher_apps(pub)
+            out[pub] = fetch_publisher_apps(pub, country=args.country)
         except Exception as e:
             out[pub] = []
             print(f"! developer error for '{pub}': {e}", file=sys.stderr)
@@ -239,22 +239,30 @@ def build_parser() -> argparse.ArgumentParser:
     p_sea.add_argument("queries", nargs="+", help="Search queries")
     p_sea.add_argument("--with-details", action="store_true",
                        help="Also fetch per-app details (description, reviews, etc.)")
+    p_sea.add_argument("--country", default="us",
+                     help="Storefront to read, as a two letter code (default us)")
     p_sea.add_argument("--json", action="store_true", help="Output as JSON")
     p_sea.set_defaults(func=cmd_search)
 
     p_det = sub.add_parser("details", help="Rich details for one or more package ids")
     p_det.add_argument("packages", nargs="+", help="Package ids, e.g. com.duolingo")
+    p_det.add_argument("--country", default="us",
+                     help="Storefront to read, as a two letter code (default us)")
     p_det.add_argument("--json", action="store_true", help="Output as JSON")
     p_det.set_defaults(func=cmd_details)
 
     p_all = sub.add_parser("all", help="Run suggest + search together for each query")
     p_all.add_argument("queries", nargs="+", help="Search queries")
+    p_all.add_argument("--country", default="us",
+                     help="Storefront to read, as a two letter code (default us)")
     p_all.add_argument("--json", action="store_true", help="Output as JSON")
     p_all.set_defaults(func=cmd_all)
 
     p_dev = sub.add_parser("developer", help="All apps by a publisher/developer name")
     p_dev.add_argument("publishers", nargs="+",
                        help="Developer display name, e.g. \"Google LLC\"")
+    p_dev.add_argument("--country", default="us",
+                     help="Storefront to read, as a two letter code (default us)")
     p_dev.add_argument("--json", action="store_true", help="Output as JSON")
     p_dev.set_defaults(func=cmd_developer)
 

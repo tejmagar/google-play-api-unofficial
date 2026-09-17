@@ -32,7 +32,7 @@ import urllib.error
 import urllib.parse
 
 from .http import PLAY_BASE, fetch, post_form
-from .search import _extract, _find_apps_block, _looks_like_app_entry
+from .search import _extract, _find_apps_block, _looks_like_app_entry, _store
 
 __all__ = ["fetch_publisher_apps", "PlayShapeChanged", "SEARCH_CAP"]
 
@@ -75,6 +75,8 @@ class PlayShapeChanged(RuntimeError):
 def fetch_publisher_apps(
     publisher: str,
     *,
+    country: str = "us",
+    lang: str = "en-US",
     full: bool = False,
     max_apps: int | None = None,
     timeout: int = 30,
@@ -112,7 +114,9 @@ def _search_once(publisher: str, timeout: int) -> list[dict]:
     """One ``pub:"Name"`` search page."""
     query = urllib.parse.quote_plus(f'pub:"{publisher}"')
     try:
-        html = fetch(f"{PLAY_BASE}/store/search?q={query}&c=apps&hl=en-US",
+        html = fetch(f"{PLAY_BASE}/store/search?q={query}&c=apps"
+                     f"&hl={urllib.parse.quote_plus(lang)}"
+                     f"&gl={urllib.parse.quote_plus(_store(country))}",
                      timeout=timeout)
     except urllib.error.HTTPError as e:
         if e.code == 404:

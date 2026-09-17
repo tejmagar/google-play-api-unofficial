@@ -4,8 +4,10 @@ import html as html_lib
 import json
 import re
 import urllib.error
+import urllib.parse
 
 from .http import PLAY_BASE, fetch
+from .search import _store
 
 
 class AppNotFoundError(Exception):
@@ -200,8 +202,14 @@ def _extract_details(record: list, html_text: str = "") -> dict | None:
     }
 
 
-def fetch_app_details(package_id: str, timeout: int = 15) -> dict | None:
-    """Fetch rich details for one Play Store app by package id.
+def fetch_app_details(package_id: str, country: str = "us", lang: str = "en-US",
+                      timeout: int = 15) -> dict | None:
+    """Fetch rich details for one Play Store app by package id, from one store.
+
+    `country` was hardcoded to `us` here while the search page sent no storefront
+    at all, so the two halves of a lookup could disagree about which country they
+    were describing. It is the caller's now, and it still defaults to `us`, so
+    nothing that did not pass one changes.
 
     Raises:
         AppNotFoundError: if the Play Store returns 404 (no such package).
@@ -211,7 +219,9 @@ def fetch_app_details(package_id: str, timeout: int = 15) -> dict | None:
 
     Returns None if the page was fetched but couldn't be parsed.
     """
-    url = f"{PLAY_BASE}/store/apps/details?id={package_id}&hl=en-US&gl=us"
+    url = (f"{PLAY_BASE}/store/apps/details?id={package_id}"
+           f"&hl={urllib.parse.quote_plus(lang)}"
+           f"&gl={urllib.parse.quote_plus(_store(country))}")
     try:
         html_text = fetch(url, timeout=timeout)
     except urllib.error.HTTPError as e:
