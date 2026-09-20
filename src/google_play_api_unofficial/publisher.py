@@ -98,20 +98,29 @@ def fetch_publisher_apps(
         App dicts in Play's own order, deduplicated by package.
     """
     if not full:
-        return _search_once(publisher, timeout)
+        return _search_once(publisher, country, lang, timeout)
 
     # Page order first, then whatever only the search knows about, so the
     # common case reads in the order the publisher's own page presents.
     apps = {a["package"]: a
-            for a in _walk_publisher_page(publisher, max_apps, timeout, pause)}
-    for app in _search_once(publisher, timeout):
+            for a in _walk_publisher_page(publisher, country, lang,
+                                          max_apps, timeout, pause)}
+    for app in _search_once(publisher, country, lang, timeout):
         apps.setdefault(app["package"], app)
     out = list(apps.values())
     return out[:max_apps] if max_apps is not None else out
 
 
-def _search_once(publisher: str, timeout: int) -> list[dict]:
-    """One ``pub:"Name"`` search page."""
+def _search_once(publisher: str, country: str, lang: str,
+                 timeout: int) -> list[dict]:
+    """One ``pub:"Name"`` search page.
+
+    ``country`` and ``lang`` are parameters rather than module constants
+    because this function already read them off the enclosing scope, where they
+    did not exist: every default call raised ``NameError: name 'lang' is not
+    defined`` before reaching Play. That is the whole non-``full`` path, which
+    is what ``fetch_publisher_apps`` does unless asked otherwise.
+    """
     query = urllib.parse.quote_plus(f'pub:"{publisher}"')
     try:
         html = fetch(f"{PLAY_BASE}/store/search?q={query}&c=apps"
@@ -129,7 +138,8 @@ def _search_once(publisher: str, timeout: int) -> list[dict]:
     return _collect(_find_apps_block(json.loads(m.group(1))) or [])
 
 
-def _walk_publisher_page(publisher: str, max_apps: int | None,
+def _walk_publisher_page(publisher: str, country: str, lang: str,
+                         max_apps: int | None,
                          timeout: int, pause: float) -> list[dict]:
     """Page the publisher's own listing until it stops yielding new apps.
 
@@ -138,7 +148,7 @@ def _walk_publisher_page(publisher: str, max_apps: int | None,
     rest through the RPC. Both are read here: the inline entries first (they
     are the first page either way), then any further RPC pages.
     """
-    page_url = _publisher_url(publisher)
+    page_url = _publisher_url(publisher, country, lang)
     try:
         html = fetch(page_url, timeout=timeout)
     except urllib.error.HTTPError as e:
@@ -217,11 +227,19 @@ def _largest_entries(data) -> list:
     return best
 
 
-def _publisher_url(publisher: str) -> str:
-    """Their page. Numeric ids live under /dev, display names under /developer."""
+def _publisher_url(publisher: str, country: str, lang: str) -> str:
+    """Their page. Numeric ids live under /dev, display names under /developer.
+
+    The storefront was pinned to ``hl=en&gl=us`` here, so a caller asking for
+    another country got the American page under its own name - the same bug
+    the search path had, in the half of this module that reads the publisher's
+    own listing.
+    """
     path = "dev" if publisher.isdigit() else "developer"
     return (f"{PLAY_BASE}/store/apps/{path}"
-            f"?id={urllib.parse.quote_plus(publisher)}&hl=en&gl=us")
+            f"?id={urllib.parse.quote_plus(publisher)}"
+            f"&hl={urllib.parse.quote_plus(lang)}"
+            f"&gl={urllib.parse.quote_plus(_store(country))}")
 
 
 def _session(html: str) -> tuple[str, str, str | None]:
